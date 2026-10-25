@@ -18,8 +18,20 @@ spring:
     open-in-view: false        # Best practice: Prevents holding DB connections open through view rendering
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
+    logging:
+      level:
+        org.hibernate.orm.jdbc.bind: trace
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      username: default
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true
+      timeout: 5000ms
