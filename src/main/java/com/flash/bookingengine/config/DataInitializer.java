@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @Configuration
 @RequiredArgsConstructor
@@ -13,19 +14,33 @@ import org.springframework.context.annotation.Configuration;
 public class DataInitializer implements CommandLineRunner {
 
     private final ItemRepository itemRepository;
+    private final StringRedisTemplate redisTemplate;
 
     @Override
     public void run(String... args) {
+        Item item;
+
         if (itemRepository.count() == 0) {
             Item flashItem = Item.builder()
                     .name("VIP Concert Ticket")
                     .totalStock(100)
                     .availableStock(100)
                     .build();
-
-            Item savedItem = itemRepository.save(flashItem);
-            log.info("Initialized test inventory: ID={}, Name='{}', Stock={}",
-                    savedItem.getId(), savedItem.getName(), savedItem.getAvailableStock());
+            item = itemRepository.save(flashItem);
+            log.info("Created new item in DB: ID={}, Name='{}', Stock={}",
+                    item.getId(), item.getName(), item.getAvailableStock());
+        } else {
+            item = itemRepository.findAll().get(0);
+            log.info("Found existing item in DB: ID={}, Name='{}', Available Stock={}",
+                    item.getId(), item.getName(), item.getAvailableStock());
         }
+
+        // Cache warm-up: Push available stock to Redis under 'item:{id}:stock'
+        String stockKey = "item:" + item.getId() + ":stock";
+        redisTemplate.opsForValue().set(stockKey, String.valueOf(item.getAvailableStock()));
+
+        log.info("==========================================");
+        log.info("WARMED REDIS CACHE: Key='{}', Stock={}", stockKey, item.getAvailableStock());
+        log.info("==========================================");
     }
 }
