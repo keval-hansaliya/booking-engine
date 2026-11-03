@@ -35,8 +35,14 @@ public class ReservationController {
     @PostMapping("/v2")
     public ResponseEntity<?> reserveTicketFast(@Valid @RequestBody ReservationRequestDto request) {
         try {
-            Reservation reservation = redisReservationService.reserveWithRedis(request);
-            return ResponseEntity.status(HttpStatus.CREATED).body(reservation);
+            String reservationToken = redisReservationService.reserveWithRedis(request);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(
+                    java.util.Map.of(
+                            "message", "Reservation confirmed! Processing ticket...",
+                            "reservationToken", reservationToken,
+                            "status", "PENDING"
+                    )
+            );
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         } catch (IllegalArgumentException e) {
