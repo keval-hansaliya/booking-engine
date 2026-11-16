@@ -40,3 +40,18 @@ spring:
           max-active: 50
           max-idle: 10
           min-idle: 2
+
+  kafka:
+    bootstrap-servers: ${kafka-1a9f4afa-xcrc-f681.e.aivencloud.com:23468}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: booking-persistence-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.flash.bookingengine.*"

@@ -1,12 +1,15 @@
 package com.flash.bookingengine.service;
 
+import com.flash.bookingengine.dto.ReservationEvent;
 import com.flash.bookingengine.dto.ReservationRequestDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.UUID;
 
@@ -15,14 +18,16 @@ import java.util.UUID;
 @Slf4j
 public class RedisReservationService {
 
+    private static final String TOPIC_RESERVATIONS = "reservation-events";
+
     private final StringRedisTemplate redisTemplate;
     private final RedisScript<Long> decrementStockScript;
-    private final AsyncPersistenceService asyncPersistenceService;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public String reserveWithRedis(ReservationRequestDto request) {
         String stockKey = "item:" + request.getItemId() + ":stock";
 
-        // 1. Atomic Lua gatekeeper check in RAM
+        // 1. In-memory atomic check & decrement
         Long remainingStock = redisTemplate.execute(
                 decrementStockScript,
                 Collections.singletonList(stockKey),
@@ -37,64 +42,21 @@ public class RedisReservationService {
             throw new IllegalStateException("Sold out! No tickets remaining.");
         }
 
-        // 2. Offload DB writes to background thread pool
-        asyncPersistenceService.persistReservationAndSyncStock(request.getItemId(), request.getUserId());
+        // 2. Generate unique reservation token
+        String reservationToken = UUID.randomUUID().toString();
 
-        // 3. Immediately return reservation confirmation token
-        return UUID.randomUUID().toString();
-    }
-}
-
-/*package com.flash.bookingengine.service;
-
-import com.flash.bookingengine.dto.ReservationRequestDto;
-import com.flash.bookingengine.model.Reservation;
-import com.flash.bookingengine.model.ReservationStatus;
-import com.flash.bookingengine.repository.ReservationRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.stereotype.Service;
-
-import java.util.Collections;
-import java.util.UUID;
-
-@Service
-@RequiredArgsConstructor
-@Slf4j
-public class RedisReservationService {
-
-    private final StringRedisTemplate redisTemplate;
-    private final RedisScript<Long> decrementStockScript;
-    private final ReservationRepository reservationRepository;
-
-    public Reservation reserveWithRedis(ReservationRequestDto request) {
-        String stockKey = "item:" + request.getItemId() + ":stock";
-
-        // 1. Atomic Lua gatekeeper check in RAM
-        Long remainingStock = redisTemplate.execute(
-                decrementStockScript,
-                Collections.singletonList(stockKey),
-                "1"
-        );
-
-        if (remainingStock == null || remainingStock == -2) {
-            throw new IllegalArgumentException("Item inventory not loaded in Redis for ID: " + request.getItemId());
-        }
-
-        if (remainingStock == -1) {
-            // Rejected immediately in memory; no database transaction is created
-            throw new IllegalStateException("Sold out! No tickets remaining.");
-        }
-
-        // 2. Persist reservation only for successful allocations
-        Reservation reservation = Reservation.builder()
+        // 3. Build Kafka event
+        ReservationEvent event = ReservationEvent.builder()
+                .reservationToken(reservationToken)
                 .itemId(request.getItemId())
                 .userId(request.getUserId())
-                .status(ReservationStatus.PENDING)
+                .timestamp(LocalDateTime.now())
                 .build();
 
-        return reservationRepository.save(reservation);
+        // 4. Publish to Kafka (partitioned by itemId to ensure strict per-item ordering)
+        kafkaTemplate.send(TOPIC_RESERVATIONS, String.valueOf(request.getItemId()), event);
+        log.info("Published reservation event to Kafka: Token={}, ItemId={}", reservationToken, request.getItemId());
+
+        return reservationToken;
     }
-}*/
+}
