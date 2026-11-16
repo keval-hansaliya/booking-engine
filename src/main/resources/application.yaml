@@ -41,17 +41,34 @@ spring:
           max-idle: 10
           min-idle: 2
 
-  kafka:
-    bootstrap-servers: ${kafka-1a9f4afa-xcrc-f681.e.aivencloud.com:23468}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      acks: all
-      retries: 3
-    consumer:
-      group-id: booking-persistence-group
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+  spring:
+    kafka:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
       properties:
-        spring.json.trusted.packages: "com.flash.bookingengine.*"
+        security.protocol: SASL_SSL
+        sasl.mechanism: SCRAM-SHA-256
+        sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+        acks: all
+        retries: 3
+      consumer:
+        group-id: booking-persistence-group
+        auto-offset-reset: earliest
+        key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+        value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+        properties:
+          spring.json.trusted.packages: "com.flash.bookingengine.*"
+
+logging:
+  level:
+    root: WARN
+    com.flash.bookingengine: INFO
+    org.springframework.boot.web.embedded.tomcat: INFO
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
+    org.hibernate: WARN
+    org.springframework.data: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%15.15t] %-30.30logger{30} : %msg%n"
